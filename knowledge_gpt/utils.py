@@ -69,9 +69,9 @@ def text_to_docs(text: str | List[str]) -> List[Document]:
 
     for doc in page_docs:
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=800,
+            chunk_size=1000,
             separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""],
-            chunk_overlap=0,
+            chunk_overlap=200,
         )
         chunks = text_splitter.split_text(doc.page_content)
         for i, chunk in enumerate(chunks):

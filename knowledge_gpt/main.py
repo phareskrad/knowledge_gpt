@@ -24,28 +24,34 @@ st.header("📖KnowledgeGPT")
 
 sidebar()
 
-uploaded_file = st.file_uploader(
-    "Upload a pdf, docx, or txt file",
-    type=["pdf", "docx", "txt"],
+uploaded_files = st.file_uploader(
+    "Upload a pdf, docx, txt or md file, you can also upload multiple files",
+    type=["pdf", "docx", "txt", "md"],
     help="Scanned documents are not supported yet!",
     on_change=clear_submit,
+    accept_multiple_files=True,
 )
 
 index = None
-doc = None
-if uploaded_file is not None:
-    if uploaded_file.name.endswith(".pdf"):
-        doc = parse_pdf(uploaded_file)
-    elif uploaded_file.name.endswith(".docx"):
-        doc = parse_docx(uploaded_file)
-    elif uploaded_file.name.endswith(".txt"):
-        doc = parse_txt(uploaded_file)
-    else:
-        raise ValueError("File type not supported!")
-    text = text_to_docs(doc)
+docs = []
+#parsed_text = {}
+if uploaded_files is not None:
+    for uploaded_file in uploaded_files:
+        if uploaded_file.name.endswith(".pdf"):
+            text = parse_pdf(uploaded_file)
+        elif uploaded_file.name.endswith(".docx"):
+            text = parse_docx(uploaded_file)
+        elif uploaded_file.name.endswith(".txt"):
+            text = parse_txt(uploaded_file)
+        elif uploaded_file.name.endswith(".md"):
+            text = parse_txt(uploaded_file)
+        else:
+            raise ValueError("File type not supported!")
+        docs += text_to_docs(text)
+        #parse_txt[uploaded_file.name] = text
     try:
         with st.spinner("Indexing document... This may take a while⏳"):
-            index = embed_docs(text)
+            index = embed_docs(docs)
         st.session_state["api_key_configured"] = True
     except OpenAIError as e:
         st.error(e._message)
@@ -53,12 +59,12 @@ if uploaded_file is not None:
 query = st.text_area("Ask a question about the document", on_change=clear_submit)
 with st.expander("Advanced Options"):
     show_all_chunks = st.checkbox("Show all chunks retrieved from vector search")
-    show_full_doc = st.checkbox("Show parsed contents of the document")
+    # show_full_doc = st.checkbox("Show parsed contents of the document")
 
-if show_full_doc and doc:
-    with st.expander("Document"):
-        # Hack to get around st.markdown rendering LaTeX
-        st.markdown(f"<p>{wrap_text_in_html(doc)}</p>", unsafe_allow_html=True)
+#if show_full_doc and docs:
+#    with st.expander("Document"):
+       # Hack to get around st.markdown rendering LaTeX
+#        st.markdown(f"<p>{wrap_text_in_html(doc)}</p>", unsafe_allow_html=True)
 
 button = st.button("Submit")
 if button or st.session_state.get("submit"):
