@@ -87,9 +87,22 @@ if button or st.session_state.get("submit"):
                 sources = get_sources(answer, sources)
 
             with answer_col:
+                answer_text = answer["output_text"].split("SOURCES: ")[0]
                 st.markdown("#### Answer")
-                st.markdown(answer["output_text"].split("SOURCES: ")[0])
-
+                if "answer_text" not in st.session_state:
+                    st.session_state["answer_text"] = answer_text
+                if st.session_state.get("edit_answer"):
+                    edited_answer = st.text_area("Edit Answer", value=st.session_state["answer_text"])
+                    if st.button("Finish Editing"):
+                        st.session_state["answer_text"] = edited_answer
+                        st.session_state["edit_answer"] = False
+                        st.experimental_rerun()
+                else:
+                    st.markdown(st.session_state["answer_text"])
+                    if st.button("Edit Answer"):
+                        st.session_state["edit_answer"] = True
+                        st.experimental_rerun()
+                
             with sources_col:
                 st.markdown("#### Sources")
                 for source in sources:
