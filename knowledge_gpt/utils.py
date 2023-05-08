@@ -1,4 +1,5 @@
 import re
+import os
 from io import BytesIO
 from typing import Any, Dict, List
 
@@ -159,5 +160,36 @@ def wrap_text_in_html(text: str | List[str]) -> str:
         text = "\n<hr/>\n".join(text)
     return "".join([f"<p>{line}</p>" for line in text.split("\n")])
 
-def post_tweet(text):
-    print("placeholder")
+# A function using tweepy and twitter API to set up a twitter client, keys and secrets are stored in .env file
+# given a list of text, seprated by newlines, it will tweet each line in a thread
+# it will also store the tweet id, tweet url, and tweet text in a dataframe
+# it will also return the dataframe
+def tweet(text: str | List[str]) -> pd.DataFrame:
+    # set up twitter client
+    client = tweepy.Client(consumer_key=os.getenv("TWITTER_API_KEY"),
+                       consumer_secret=os.getenv("TWITTER_API_SECRET_KEY"),
+                       access_token=os.getenv("TWITTER_ACCESS_TOKEN"),
+                       access_token_secret=os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+                       )
+
+    # if text is a string, split it into a list
+    if isinstance(text, str):
+        text = text.split("\n")
+
+    # create a dataframe to store tweet id, url, and text
+    df = pd.DataFrame(columns=["id", "original_text"])
+
+    # tweet each line in a thread
+    for i, line in enumerate(text):
+        # if it's the first line, tweet it
+        if i == 0:
+            response = client.create_tweet(text=line)
+            tweet_id = response.data['id']
+        # if it's not the first line, reply to the previous tweet
+        else:
+            response = client.create_tweet(text=line, in_reply_to_tweet_id=tweet_id)
+        # add the tweet id, url, and text to the dataframe
+    df = df.append({"id": tweet_id, "original_text": " ".join(text)}, ignore_index=True)
+
+    return df
+    
