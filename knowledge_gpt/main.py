@@ -76,7 +76,6 @@ if button or st.session_state.get("submit"):
         st.error("Please enter a question!")
     else:
         st.session_state["submit"] = True
-        # Output Columns
         answer_col, sources_col = st.columns(2)
         sources = search_docs(index, query)
 
@@ -88,21 +87,28 @@ if button or st.session_state.get("submit"):
 
             with answer_col:
                 answer_text = answer["output_text"].split("SOURCES: ")[0]
-                st.markdown("#### Answer")
                 if "answer_text" not in st.session_state:
                     st.session_state["answer_text"] = answer_text
-                if st.session_state.get("edit_answer"):
-                    edited_answer = st.text_area("Edit Answer", value=st.session_state["answer_text"])
-                    if st.button("Finish Editing"):
-                        st.session_state["answer_text"] = edited_answer
-                        st.session_state["edit_answer"] = False
-                        st.experimental_rerun()
-                else:
-                    st.markdown(st.session_state["answer_text"])
-                    if st.button("Edit Answer"):
-                        st.session_state["edit_answer"] = True
-                        st.experimental_rerun()
                 
+                st.markdown("#### Original Answer")
+                st.markdown(st.session_state["answer_text"])
+
+                with st.form("edit_form"):
+                    if st.session_state.get("edit_answer"):
+                        edited_answer = st.text_area("Edit Answer", value=st.session_state["answer_text"])
+                        if st.form_submit_button("Finish Editing"):
+                            st.session_state["updated_answer_text"] = edited_answer
+                            st.session_state["edit_answer"] = False
+                            st.experimental_rerun()
+                    else:
+                        if st.form_submit_button("Edit Answer"):
+                            st.session_state["edit_answer"] = True
+                            st.experimental_rerun()
+                
+                if "updated_answer_text" in st.session_state:
+                    st.markdown("#### Updated Answer")
+                    st.markdown(st.session_state["updated_answer_text"])
+
             with sources_col:
                 st.markdown("#### Sources")
                 for source in sources:
