@@ -12,6 +12,7 @@ from knowledge_gpt.utils import (
     search_docs,
     text_to_docs,
     wrap_text_in_html,
+    tweet,
 )
 
 
@@ -56,9 +57,9 @@ if uploaded_files is not None:
     except OpenAIError as e:
         st.error(e._message)
 
-query = st.text_area("Ask a question about the document", on_change=clear_submit)
-with st.expander("Advanced Options"):
-    show_all_chunks = st.checkbox("Show all chunks retrieved from vector search")
+search = st.text_area("Search the document with some keywords or a short sentence", on_change=clear_submit)
+# with st.expander("Advanced Options"):
+#    show_all_chunks = st.checkbox("Show all chunks retrieved from vector search")
     # show_full_doc = st.checkbox("Show parsed contents of the document")
 
 #if show_full_doc and docs:
@@ -77,44 +78,52 @@ if button or st.session_state.get("submit"):
     else:
         st.session_state["submit"] = True
         answer_col, sources_col = st.columns(2)
-        sources = search_docs(index, query)
 
         try:
-            answer = get_answer(sources, query)
-            if not show_all_chunks:
-                # Get the sources for the answer
-                sources = get_sources(answer, sources)
-
-            with answer_col:
-                answer_text = answer["output_text"].split("SOURCES: ")[0]
-                if "answer_text" not in st.session_state:
-                    st.session_state["answer_text"] = answer_text
-                
-                st.markdown("#### Original Answer")
-                st.markdown(st.session_state["answer_text"])
-
-                with st.form("edit_form"):
-                    if st.session_state.get("edit_answer"):
-                        edited_answer = st.text_area("Edit Answer", value=st.session_state["answer_text"])
-                        if st.form_submit_button("Finish Editing"):
-                            st.session_state["updated_answer_text"] = edited_answer
-                            st.session_state["edit_answer"] = False
-                            st.experimental_rerun()
-                    else:
-                        if st.form_submit_button("Edit Answer"):
-                            st.session_state["edit_answer"] = True
-                            st.experimental_rerun()
-                
-                if "updated_answer_text" in st.session_state:
-                    st.markdown("#### Updated Answer")
-                    st.markdown(st.session_state["updated_answer_text"])
+            sources = search_docs(index, search)
 
             with sources_col:
                 st.markdown("#### Sources")
                 for source in sources:
                     st.markdown(source.page_content)
                     st.markdown(source.metadata["source"])
-                    st.markdown("---")
+                    st.markdown("---")        
 
+            with answer_col:
+                task = st.text_area("Ask AI to help you with a editorial task, based on the source documents", on_change=clear_submit)
+                if task:
+                    answer = get_answer(sources, task)
+                    answer_text = answer["answer"]
+                    if "answer_text" not in st.session_state:
+                        st.session_state["answer_text"] = answer_text
+                
+                    st.markdown("#### Original Answer")
+                    st.markdown(st.session_state["answer_text"])
+
+                    with st.form("edit_form"):
+                        if st.session_state.get("edit_answer"):
+                            edited_answer = st.text_area("Edit Answer", value=st.session_state["answer_text"])
+                            if st.form_submit_button("Finish Editing"):
+                                st.session_state["updated_answer_text"] = edited_answer
+                                st.session_state["edit_answer"] = False
+                                st.experimental_rerun()
+                        else:
+                            if st.form_submit_button("Edit Answer"):
+                                st.session_state["edit_answer"] = True
+                                st.experimental_rerun()
+                    
+                    if "updated_answer_text" in st.session_state:
+                        st.markdown("#### Updated Answer")
+                        st.markdown(st.session_state["updated_answer_text"])
+                
         except OpenAIError as e:
             st.error(e._message)
+
+tweet_button = st.button("Tweet Answer")
+if tweet_button:
+    if "updated_answer_text" in st.session_state:
+        result = tweet(st.session_state["updated_answer_text"])
+    elif "answer_text" in st.session_state:
+        result = tweet(st.session_state["answer_text"])
+    else:
+        st.error("Please submit a task first!")

@@ -1,5 +1,6 @@
 import re
 import os
+import pandas as pd
 from io import BytesIO
 from typing import Any, Dict, List
 
@@ -111,31 +112,61 @@ def search_docs(index: VectorStore, query: str) -> List[Document]:
 
     # Search for similar chunks
     docs = index.similarity_search(query, k=5)
-    return docs
+    # Query against OpenAI's Chat API to retrieve the most relevant document's page number
+    page = get_most_relevant_docs(docs, query)
+    # Retrieve the documents from the page number, based on the metadata
+    return retrieve_docs(page, index)
 
+def get_most_relevant_docs(docs: List[Document], query: str) -> List[Document]:
+    prompt_template = """Use the following pieces of context and provided keywords to find the most relevant document. Notice that the provided context are always five documents, each with page_content and metadata. Format your answer in two sections, the page_content of the document and the metadata of the document. 
+    =========
+    Context: {context}
+    =========
+    Keywords: {question}
+    =========
+    Page Content:
+    =========
+    Metadata:"""
+    qa_prompt = PromptTemplate(
+        template=prompt_template, input_variables=["context", "question"]
+    )
+    messages=[
+            {"role": "system", "content": "You are a useful AI assistant and you understand how to retrieve document based on relevant keywords."},
+            {"role": "user", "content": qa_prompt.format(context=docs, question=query)}
+        ]
+    response = openai.ChatCompletion.create(
+        model='gpt-3.5-turbo-0301',
+        messages=messages,
+        temperature=0
+        )
+    
+    print(response['choices'][0]['message']['content'])
+    return int(re.search(r"'page': (\d+)", response['choices'][0]['message']['content'].split('\n\n')[2]).group(1))
 
 @st.cache(allow_output_mutation=True)
 def get_answer(docs: List[Document], query: str) -> Dict[str, Any]:
     """Gets an answer to a question from a list of Documents."""
 
-    # Get the answer
-
-    chain = load_qa_with_sources_chain(
-        OpenAI(
-            temperature=0, openai_api_key=st.session_state.get("OPENAI_API_KEY")
-        ),  # type: ignore
-        chain_type="stuff",
-        prompt=STUFF_PROMPT,
+    prompt_template = """Use the following pieces of context to answer the question at the end. 
+    =========
+    Context: {context}
+    =========
+    Question: {question}
+    =========
+    Final Answer:"""
+    qa_prompt = PromptTemplate(
+        template=prompt_template, input_variables=["context", "question"]
     )
-
-    # Cohere doesn't work very well as of now.
-    # chain = load_qa_with_sources_chain(
-    #     Cohere(temperature=0), chain_type="stuff", prompt=STUFF_PROMPT  # type: ignore
-    # )
-    answer = chain(
-        {"input_documents": docs, "question": query}, return_only_outputs=True
-    )
-    return answer
+    messages=[
+            {"role": "system", "content": "You are a marketing expert and you know how to write engaging twitter threads."},
+            {"role": "user", "content": qa_prompt.format(context=docs, question=query)}
+        ]
+    response = openai.ChatCompletion.create(
+        model='gpt-3.5-turbo-0301',
+        messages=messages,
+        temperature=0
+        )
+    return {"answer":response['choices'][0]['message']['content'], "sources":docs}
 
 
 @st.cache(allow_output_mutation=True)
@@ -143,7 +174,7 @@ def get_sources(answer: Dict[str, Any], docs: List[Document]) -> List[Document]:
     """Gets the source documents for an answer."""
 
     # Get sources for the answer
-    source_keys = [s for s in answer["output_text"].split("SOURCES: ")[-1].split(", ")]
+    source_keys = [s['metadata']['source'] for s in answer["sources"]]
 
     source_docs = []
     for doc in docs:
@@ -192,4 +223,29 @@ def tweet(text: str | List[str]) -> pd.DataFrame:
     df = df.append({"id": tweet_id, "original_text": " ".join(text)}, ignore_index=True)
 
     return df
+
+def parse_source_document(source_text):
+
+# Split the text into separate document strings
+    document_strings = source_text.split('\n- Document')
+# Initialize an empty list to hold the parsed documents
+    documents = []
+# Parse each document string into a dictionary
+    for document_string in document_strings[1:]:
+    # Extract the page_content and metadata values from the string
+        page_content = document_string.split("page_content='")[1].split("', metadata=")[0]
+        metadata_string = document_string.split("metadata=")[1].strip(")")
+        metadata = eval(metadata_string) # Parse the metadata string into a dictionary
     
+    # Create a dictionary for the document and append it to the documents list
+        document = {'page_content': page_content, 'metadata': metadata}
+        documents.append(document)
+    
+    return documents
+
+def retrieve_docs(page, index) -> List[Document]:
+    result = []
+    for key, value in index.docstore._dict.items():
+        if value.metadata['page'] == page:
+            result.append(value)
+    return result
