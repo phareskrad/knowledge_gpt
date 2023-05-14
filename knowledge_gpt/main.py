@@ -15,13 +15,15 @@ from knowledge_gpt.utils import (
     tweet,
 )
 
+st.set_page_config(page_title="KnowledgeGPT", page_icon="📖", layout="wide")
+st.header("📖KnowledgeGPT")
 
 def clear_submit():
     st.session_state["submit"] = False
-
-
-st.set_page_config(page_title="KnowledgeGPT", page_icon="📖", layout="wide")
-st.header("📖KnowledgeGPT")
+    if "answer_text" in st.session_state:
+        del st.session_state["answer_text"]
+    if "updated_answer_text" in st.session_state:
+        del st.session_state["updated_answer_text"]
 
 sidebar()
 
@@ -73,7 +75,7 @@ if button or st.session_state.get("submit"):
         st.error("Please configure your OpenAI API key!")
     elif not index:
         st.error("Please upload a document!")
-    elif not query:
+    elif not search:
         st.error("Please enter a question!")
     else:
         st.session_state["submit"] = True
@@ -90,31 +92,35 @@ if button or st.session_state.get("submit"):
                     st.markdown("---")        
 
             with answer_col:
-                task = st.text_area("Ask AI to help you with a editorial task, based on the source documents", on_change=clear_submit)
-                if task:
+                task = st.text_area("Ask AI to help you with an editorial task, based on the source documents")
+                task_button = st.button("Submit Task")
+                if task_button:
                     answer = get_answer(sources, task)
                     answer_text = answer["answer"]
                     if "answer_text" not in st.session_state:
                         st.session_state["answer_text"] = answer_text
-                
+
+                    st.session_state["submit"] = True
+
+                if "answer_text" in st.session_state:
                     st.markdown("#### Original Answer")
                     st.markdown(st.session_state["answer_text"])
 
-                    with st.form("edit_form"):
-                        if st.session_state.get("edit_answer"):
-                            edited_answer = st.text_area("Edit Answer", value=st.session_state["answer_text"])
-                            if st.form_submit_button("Finish Editing"):
-                                st.session_state["updated_answer_text"] = edited_answer
-                                st.session_state["edit_answer"] = False
-                                st.experimental_rerun()
-                        else:
-                            if st.form_submit_button("Edit Answer"):
-                                st.session_state["edit_answer"] = True
-                                st.experimental_rerun()
+                with st.form("edit_form"):
+                    if st.session_state.get("edit_answer"):
+                        edited_answer = st.text_area("Edit Answer", value=st.session_state["answer_text"])
+                        if st.form_submit_button("Finish Editing"):
+                            st.session_state["updated_answer_text"] = edited_answer
+                            st.session_state["edit_answer"] = False
+                            st.experimental_rerun()
+                    else:
+                        if st.form_submit_button("Edit Answer"):
+                            st.session_state["edit_answer"] = True
+                            st.experimental_rerun()
                     
-                    if "updated_answer_text" in st.session_state:
-                        st.markdown("#### Updated Answer")
-                        st.markdown(st.session_state["updated_answer_text"])
+                if "updated_answer_text" in st.session_state:
+                    st.markdown("#### Updated Answer")
+                    st.markdown(st.session_state["updated_answer_text"])
                 
         except OpenAIError as e:
             st.error(e._message)

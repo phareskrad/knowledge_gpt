@@ -6,18 +6,19 @@ from typing import Any, Dict, List
 
 import docx2txt
 import streamlit as st
+import openai
 from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 from langchain.docstore.document import Document
 from langchain.llms import OpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import VectorStore
 from langchain.vectorstores.faiss import FAISS
+from langchain.prompts import PromptTemplate
 from openai.error import AuthenticationError
 from pypdf import PdfReader
 
 from knowledge_gpt.embeddings import OpenAIEmbeddings
 from knowledge_gpt.prompts import STUFF_PROMPT
-
 
 @st.experimental_memo()
 def parse_docx(file: BytesIO) -> str:
@@ -118,7 +119,7 @@ def search_docs(index: VectorStore, query: str) -> List[Document]:
     return retrieve_docs(page, index)
 
 def get_most_relevant_docs(docs: List[Document], query: str) -> List[Document]:
-    prompt_template = """Use the following pieces of context and provided keywords to find the most relevant document. Notice that the provided context are always five documents, each with page_content and metadata. Format your answer in two sections, the page_content of the document and the metadata of the document. 
+    prompt_template = """Use the following pieces of context and provided keywords to find the most relevant document. Notice that the provided context are always five documents, each with page_content and metadata. Format your answer in two sections, the page_content of the document and the page number from the metadata of the document. If you find more than one relevant documents, please use the chunk information under metadata section to rank the documents and only return one relevant document.  
     =========
     Context: {context}
     =========
@@ -126,7 +127,7 @@ def get_most_relevant_docs(docs: List[Document], query: str) -> List[Document]:
     =========
     Page Content:
     =========
-    Metadata:"""
+    Page Number:"""
     qa_prompt = PromptTemplate(
         template=prompt_template, input_variables=["context", "question"]
     )
@@ -141,7 +142,12 @@ def get_most_relevant_docs(docs: List[Document], query: str) -> List[Document]:
         )
     
     print(response['choices'][0]['message']['content'])
-    return int(re.search(r"'page': (\d+)", response['choices'][0]['message']['content'].split('\n\n')[2]).group(1))
+    text = response['choices'][0]['message']['content']
+    page_number_match = re.search(r"Page Number:\s+(\d+)", text)
+    if page_number_match:
+        return int(page_number_match.group(1))
+    else:
+        print("Page number not found.")
 
 @st.cache(allow_output_mutation=True)
 def get_answer(docs: List[Document], query: str) -> Dict[str, Any]:
