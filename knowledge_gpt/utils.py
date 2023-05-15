@@ -1,24 +1,22 @@
 import re
 import os
+import dotenv
 import pandas as pd
 from io import BytesIO
 from typing import Any, Dict, List
-
 import docx2txt
 import streamlit as st
 import openai
-from langchain.chains.qa_with_sources import load_qa_with_sources_chain
+import langid
+import tweepy
 from langchain.docstore.document import Document
-from langchain.llms import OpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import VectorStore
 from langchain.vectorstores.faiss import FAISS
 from langchain.prompts import PromptTemplate
 from openai.error import AuthenticationError
 from pypdf import PdfReader
-
 from knowledge_gpt.embeddings import OpenAIEmbeddings
-from knowledge_gpt.prompts import STUFF_PROMPT
 
 @st.experimental_memo()
 def parse_docx(file: BytesIO) -> str:
@@ -149,24 +147,44 @@ def get_most_relevant_docs(docs: List[Document], query: str) -> List[Document]:
     else:
         print("Page number not found.")
 
+def detect_language(text):
+    lang, _ = langid.classify(text)
+    return lang
+
 @st.cache(allow_output_mutation=True)
 def get_answer(docs: List[Document], query: str) -> Dict[str, Any]:
     """Gets an answer to a question from a list of Documents."""
-
-    prompt_template = """Use the following pieces of context to answer the question at the end. 
-    =========
-    Context: {context}
-    =========
-    Question: {question}
-    =========
-    Final Answer:"""
-    qa_prompt = PromptTemplate(
-        template=prompt_template, input_variables=["context", "question"]
-    )
-    messages=[
-            {"role": "system", "content": "You are a marketing expert and you know how to write engaging twitter threads."},
-            {"role": "user", "content": qa_prompt.format(context=docs, question=query)}
+    if detect_language(query) != 'zh':
+        prompt_template = """Use the following pieces of context to answer the question at the end.
+        =========
+        Context: {context}
+        =========
+        Question: {question}
+        ---------
+        Final Answer:"""
+        qa_prompt = PromptTemplate(
+            template=prompt_template, input_variables=["context", "question"]
+        )
+        messages=[
+                {"role": "system", "content": "You are a marketing expert and you know how to write engaging twitter threads."},
+                {"role": "user", "content": qa_prompt.format(context=docs, question=query)}
         ]
+    else:
+        prompt_template = """使用以下背景知识来回答后面的问题.
+        =========
+        背景知识: {context}
+        =========
+        问题: {question}
+        ---------
+        答案:"""
+        qa_prompt = PromptTemplate(
+            template=prompt_template, input_variables=["context", "question"]
+        )
+        messages=[
+                {"role": "system", "content": "你是一个市场营销专家，你知道如何写出引人入胜的推文。"},
+                {"role": "user", "content": qa_prompt.format(context=docs, question=query)}
+        ]
+    print(messages)
     response = openai.ChatCompletion.create(
         model='gpt-3.5-turbo-0301',
         messages=messages,
@@ -202,6 +220,7 @@ def wrap_text_in_html(text: str | List[str]) -> str:
 # it will also store the tweet id, tweet url, and tweet text in a dataframe
 # it will also return the dataframe
 def tweet(text: str | List[str]) -> pd.DataFrame:
+    dotenv.load_dotenv()
     # set up twitter client
     client = tweepy.Client(consumer_key=os.getenv("TWITTER_API_KEY"),
                        consumer_secret=os.getenv("TWITTER_API_SECRET_KEY"),
@@ -211,11 +230,11 @@ def tweet(text: str | List[str]) -> pd.DataFrame:
 
     # if text is a string, split it into a list
     if isinstance(text, str):
-        text = text.split("\n")
+        text = text.split("\n\n")
 
     # create a dataframe to store tweet id, url, and text
     df = pd.DataFrame(columns=["id", "original_text"])
-
+    print(text)
     # tweet each line in a thread
     for i, line in enumerate(text):
         # if it's the first line, tweet it

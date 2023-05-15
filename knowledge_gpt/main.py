@@ -133,3 +133,8 @@ if tweet_button:
         result = tweet(st.session_state["answer_text"])
     else:
         st.error("Please submit a task first!")
+
+with st.form("check_text_length"):
+    input_text = st.text_area("Enter text to check character length")
+    if st.form_submit_button("Check Length"):
+        st.write(f"The character length of the input text is: {len(input_text)}")
